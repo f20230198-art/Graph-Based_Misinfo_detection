@@ -1,0 +1,47 @@
+# Data
+datasets/*
+!datasets/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+
+# Model checkpoints and large caches
+results/checkpoints/
+*.pt
+*.pth
+*.safetensors
+
+# Archive of stale artifacts (kept locally for traceability, not committed)
+archive/
+
+# Regeneratable training dumps (big, reproducible via main.py)
+results/histories/
+results/predictions/
+results/upfd_multiseed_runs.csv
+
+# LaTeX build artifacts
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.bbl
+docs/*.blg
+docs/*.pdf
+!docs/FDS.pdf
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/

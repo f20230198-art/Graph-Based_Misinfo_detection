@@ -1,0 +1,25 @@
+# PropNet Configuration (UPFD PolitiFact + GossipCop)
+
+paths:
+  upfd_politifact_root: "datasets/UPFD_Dataset/politifact/raw"
+  upfd_gossipcop_root: "datasets/UPFD_Dataset/gossipcop/raw"
+  checkpoint_dir: "results/checkpoints"
+
+training:
+  batch_size: 32
+  hidden_dim: 128
+  dropout: 0.4
+  lr: 5.0e-4
+  weight_decay: 5.0e-4
+  max_epochs: 120
+  patience: 15
+  lr_scheduler_patience: 4
+  lr_scheduler_factor: 0.5
+  grad_clip_norm: 1.0
+  use_amp: true
+  seed: 42
+
+split:
+  test_size: 0.2
+  val_size: 0.1
+  random_state: 42

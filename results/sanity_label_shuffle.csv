@@ -1,0 +1,6 @@
+model,auc_shuffled,verdict
+RF_motif,0.4860,OK (chance-level)
+TextOnly_BERT,0.5088,OK (chance-level)
+GraphOnly_GAT,0.4955,OK (chance-level)
+Hybrid_GAT,0.5025,OK (chance-level)
+PropNet_Fusion,0.5186,OK (chance-level)

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PropNet – Graph-Based Misinformation Detection</title>
+  <meta name="description"
+    content="Interactive demo of PropNet: a hybrid GNN that detects fake news by analysing how stories propagate across social networks." />
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+
+  <!-- ═══ NAVBAR ═══════════════════════════════════════════ -->
+  <nav class="navbar" id="navbar">
+    <a href="#" class="nav-brand">PropNet</a>
+    <ul class="nav-links">
+      <li><a href="#explorer">Explorer</a></li>
+      <li><a href="#ablation">Ablation</a></li>
+      <li><a href="#results">Results</a></li>
+      <li><a href="#sanity">Integrity</a></li>
+    </ul>
+    <a href="#explorer" class="nav-chip">Try Demo →</a>
+  </nav>
+
+  <!-- ═══ HERO ══════════════════════════════════════════════ -->
+  <section class="hero">
+
+    <h1>
+      Detecting Fake News<br />
+      <span class="gradient-text">Through How It Spreads</span>
+    </h1>
+
+    <p class="hero-sub">
+      PropNet combines <strong>Graph Attention Networks</strong> over tweet propagation trees
+      with structural <strong>motif features</strong> to expose misinformation — even when the
+      text looks convincing.
+    </p>
+
+    <div class="hero-cta">
+      <a href="#explorer" class="btn-primary">Explore Propagation Graphs</a>
+      <a href="#results" class="btn-ghost">View Results</a>
+    </div>
+
+    <!-- Pipeline diagram — text only, no emojis -->
+    <div class="hero-pipeline fade-up">
+      <div class="pipe-step">
+        <span class="pipe-label">Tweets</span>
+      </div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-step">
+        <span class="pipe-label">DistilBERT<br />Embeddings</span>
+      </div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-step">
+        <span class="pipe-label">Propagation<br />Graph</span>
+      </div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-step">
+        <span class="pipe-label">GAT<br />Layers</span>
+      </div>
+      <span class="pipe-arrow">+</span>
+      <div class="pipe-step">
+        <span class="pipe-label">Motif<br />Features</span>
+      </div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-step">
+        <span class="pipe-label">Attention<br />Gate</span>
+      </div>
+      <span class="pipe-arrow">→</span>
+      <div class="pipe-step pipe-step-result">
+        <span class="pipe-label">Real / Fake</span>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div id="hero-stats">
+      <div class="stat-card">
+        <div class="stat-num" id="stat-auc">0%</div>
+        <div class="stat-label">ROC-AUC (PropNet)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-graphs">0</div>
+        <div class="stat-label">Training Graphs</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-seeds">0</div>
+        <div class="stat-label">Random Seeds</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-models">0</div>
+        <div class="stat-label">Ablation Models</div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- ═══ GRAPH EXPLORER ════════════════════════════════════ -->
+  <section id="explorer" class="fade-up">
+    <div class="section-header">
+      <h2>Propagation Graph <span class="gradient-text">Explorer</span></h2>
+      <p>Select a news item · see the propagation network · click any node to inspect its tweet metadata.</p>
+    </div>
+
+    <div class="explorer-layout">
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <h3>Test-Set Examples</h3>
+        <ul id="example-list"></ul>
+      </aside>
+
+      <!-- Center column: header + alert + canvas stacked -->
+      <div class="graph-center">
+
+        <!-- Graph info header -->
+        <div class="graph-header">
+          <span id="graph-label-badge" class="graph-main-badge badge-fake">FAKE</span>
+          <div class="graph-header-text">
+            <h3 id="graph-title">–</h3>
+            <div class="ds-tag" id="graph-dataset">–</div>
+            <div id="graph-summary">–</div>
+          </div>
+        </div>
+
+        <!-- BERT-fail alert (only visible on pol_fake_002) -->
+        <div id="bert-alert">
+          <span class="alert-label">BERT Misclassifies This</span>
+          <span>The writing is professionally crafted — Text-Only BERT predicts <strong>REAL (62%)</strong>. PropNet
+            detects it through the extreme single-hub topology: <code>root_out_degree_frac = +1.72σ</code>, the highest
+            in the dataset.</span>
+        </div>
+
+        <!-- D3 force graph -->
+        <div id="graph-canvas"></div>
+
+      </div><!-- /graph-center -->
+
+      <!-- Right panel -->
+      <div class="right-panel">
+
+        <!-- Tweet node inspector (new) -->
+        <div class="panel-card" id="tweet-inspector-card">
+          <h4>Node Inspector</h4>
+          <div id="tweet-inspector">
+            <div class="inspector-empty">
+              Click any node in the graph to inspect its tweet metadata
+            </div>
+          </div>
+        </div>
+
+        <!-- Motif features -->
+        <div class="panel-card">
+          <h4>Structural Motif Features (z-score)</h4>
+          <div id="motif-bars"></div>
+          <div class="legend-row">
+            <span class="legend-dot fake-dot"></span> fake-indicative &nbsp;
+            <span class="legend-dot real-dot"></span> real-indicative &nbsp;
+            Mid = dataset mean
+          </div>
+        </div>
+
+        <!-- Model predictions -->
+        <div class="panel-card">
+          <h4>Model Predictions</h4>
+          <div id="pred-rows"></div>
+          <div class="panel-footnote">
+            α = PropNet gate: how much the model trusted GNN stream vs. motif stream
+          </div>
+        </div>
+
+      </div><!-- /right-panel -->
+    </div><!-- /explorer-layout -->
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- ═══ ABLATION ══════════════════════════════════════════ -->
+  <section id="ablation" class="fade-up">
+    <div class="ablation-wrap">
+      <div class="ablation-copy">
+        <h2>Every Component <span class="gradient-text">Earns Its Place</span></h2>
+        <p>
+          Five progressively richer models trained on the same UPFD split (5 seeds each).
+          The jump to <strong>PropNet Fusion</strong> proves structural motif features and
+          the attention gate deliver measurable gains — not decoration.
+        </p>
+        <ul class="contrib-list">
+          <li><strong>RF Motif</strong> — motif features alone, no text, no GNN</li>
+          <li><strong>Text BERT</strong> — mean DistilBERT embeddings through Logistic Regression</li>
+          <li><strong>Graph GAT</strong> — GNN over structural node features only (degree)</li>
+          <li><strong>Hybrid GAT</strong> — GNN over full BERT node features</li>
+          <li><strong>PropNet Fusion</strong> — Hybrid GAT + motif stream + learned attention gate</li>
+        </ul>
+      </div>
+      <div id="ablation-chart"></div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- ═══ RESULTS DASHBOARD ════════════════════════════════ -->
+  <section id="results" class="fade-up">
+    <div class="section-header">
+      <h2>Results <span class="gradient-text">Dashboard</span></h2>
+      <p>Figures generated from <code class="mono">scripts/make_plots.py</code> — 5-seed pooled test set.</p>
+    </div>
+
+    <div class="tabs-row">
+      <button class="tab-btn active" data-tab="tab-metric">Metric Bars</button>
+      <button class="tab-btn" data-tab="tab-roc">ROC Curves</button>
+      <button class="tab-btn" data-tab="tab-confusion">Confusion Matrices</button>
+      <button class="tab-btn" data-tab="tab-alpha">Attention Gate α</button>
+      <button class="tab-btn" data-tab="tab-rf">RF Importance</button>
+      <button class="tab-btn" data-tab="tab-training">Training Curves</button>
+    </div>
+
+    <div id="tab-metric" class="tab-panel active">
+      <div class="figure-card">
+        <img src="assets/figures/metric_bars.png"
+          alt="Per-model ROC-AUC, F1 macro, Balanced Accuracy across dataset slices" />
+        <p class="figure-caption">Per-model performance across pooled · GossipCop · PolitiFact slices. PropNet Fusion
+          dominates all three metrics.</p>
+      </div>
+    </div>
+    <div id="tab-roc" class="tab-panel">
+      <div class="figure-card">
+        <img src="assets/figures/roc_curves_pooled.png" alt="ROC curves for all 5 models on the pooled test set" />
+        <p class="figure-caption">ROC curves across all seeds concatenated. PropNet Fusion AUC = <strong>0.993 ±
+            0.001</strong>.</p>
+      </div>
+    </div>
+    <div id="tab-confusion" class="tab-panel">
+      <div class="figure-card">
+        <img src="assets/figures/confusion_matrices.png" alt="Confusion matrices" />
+        <p class="figure-caption">Confusion matrices (models × dataset slices) pooled over seeds. PropNet shows
+          near-zero off-diagonal counts.</p>
+      </div>
+    </div>
+    <div id="tab-alpha" class="tab-panel">
+      <div class="figure-card">
+        <img src="assets/figures/fusion_alpha_hist.png" alt="Attention gate alpha distribution" />
+        <p class="figure-caption">Distribution of the learned gate weight α. PolitiFact graphs get higher α — GNN
+          structure is more decisive for political news.</p>
+      </div>
+    </div>
+    <div id="tab-rf" class="tab-panel">
+      <div class="figure-card">
+        <img src="assets/figures/rf_motif_importance.png" alt="RF feature importance" />
+        <p class="figure-caption">Random Forest feature importance across seeds. Cascade depth and star size are the
+          most discriminative single structural signals.</p>
+      </div>
+    </div>
+    <div id="tab-training" class="tab-panel">
+      <div class="figure-card">
+        <img src="assets/figures/training_curves.png" alt="Training curves" />
+        <p class="figure-caption">Training loss (left) and validation AUC (right) per seed. All GNN variants converge
+          cleanly with early stopping (patience = 15).</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="section-divider" />
+
+  <!-- ═══ INTEGRITY ════════════════════════════════════════ -->
+  <section id="sanity" class="fade-up">
+    <div class="section-header">
+      <h2>Integrity &amp; <span class="gradient-text">Legitimacy</span></h2>
+      <p>Three independent checks confirm the results are not inflated by data leakage.</p>
+    </div>
+    <div class="sanity-wrap">
+      <div class="sanity-copy">
+        <h3>Label-Shuffle Sanity Check</h3>
+        <p>
+          We randomly permuted all labels and re-ran the full ablation. Every model
+          collapses to the <strong>0.486 – 0.519 AUC range</strong> — confirming zero data leakage.
+        </p>
+        <ul class="check-list">
+          <li>Train-only motif normalisation — scaler fitted on train split only</li>
+          <li>Split-overlap assertion — fails loudly if any claim appears in two splits</li>
+          <li>Label-shuffle check — all models collapse to AUC ≈ 0.50 under random labels</li>
+        </ul>
+      </div>
+      <div class="sanity-img">
+        <img src="assets/figures/sanity_label_shuffle.png" alt="Label shuffle sanity check" />
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ FOOTER ════════════════════════════════════════════ -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-brand gradient-text">PropNet</div>
+      <div class="footer-meta">
+        Ashmit Dhown · Aaryan Gupta · Srivathsa H Honyal · Sachin P<br />
+        Dept. of Computer Science, BITS Pilani Dubai
+      </div>
+      <div class="footer-chips">
+        <span class="footer-chip">PyTorch Geometric</span>
+        <span class="footer-chip">GAT</span>
+        <span class="footer-chip">DistilBERT</span>
+        <span class="footer-chip">UPFD Dataset</span>
+        <span class="footer-chip">NetworkX</span>
+        <span class="footer-chip">D3.js</span>
+      </div>
+    </div>
+  </footer>
+
+  <div id="graph-tooltip"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-up').forEach(el => io.observe(el));
+  </script>
+</body>
+
+</html>

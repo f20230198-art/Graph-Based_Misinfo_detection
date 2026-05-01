@@ -1,108 +1,232 @@
 /* =========================================================
    app.js  –  UI controller for PropNet demo
+   Now wired to the live Flask backend at /api/sample.
    ========================================================= */
 
 const renderer = new GraphRenderer('graph-canvas');
-let currentIdx = 0;
-let currentExId = '';
+const API_BASE = ''; // same-origin (Flask serves the site)
+let currentGraph = null;     // last fetched payload
 
 // Global node-click handler wired in by graph.js
 window.onNodeClick = (node, deg) => {
-  renderNodeInfo(node, deg, currentExId);
+  renderNodeInfo(node, deg);
 };
 
 // ── Bootstrap ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  buildSidebar();
-  buildAblationChart();
-  selectExample(0);
+document.addEventListener('DOMContentLoaded', async () => {
+  // Hero counters fire immediately — they are above the fold.
   initCounters();
   initNavScroll();
   initTabSwitcher();
+  buildAblationChart();
+
+  // Build the live-demo control panel and load the index.
+  buildLiveControls();
+  await loadIndex();
+  await fetchSample({ label: 'any' });
 });
 
 
-// ── Sidebar list ──────────────────────────────────────────
-function buildSidebar() {
+// ── Sidebar list (real test graphs + filter buttons) ──────
+let TEST_INDEX = [];
+
+function buildLiveControls() {
   const list = document.getElementById('example-list');
-  list.innerHTML = '';
-  EXAMPLES.forEach((ex, i) => {
-    const li = document.createElement('li');
-    li.className = `example-item ${ex.label === 1 ? 'fake' : 'real'}`;
-    li.id = `ex-item-${i}`;
-    li.innerHTML = `
-      <span class="ex-badge ${ex.label === 1 ? 'badge-fake' : 'badge-real'}">${ex.badge}</span>
-      <div class="ex-meta">
-        <span class="ex-title">${ex.title}</span>
-        <span class="ex-ds">${ex.dataset}</span>
-      </div>
-      <span class="ex-nodes">${ex.graph.nodes.length}n</span>
-    `;
-    li.addEventListener('click', () => selectExample(i));
-    list.appendChild(li);
+  if (!list) return;
+  list.innerHTML = `
+    <div class="live-controls">
+      <button class="live-btn live-btn-fake" data-label="fake">🎲 Random FAKE</button>
+      <button class="live-btn live-btn-real" data-label="real">🎲 Random REAL</button>
+      <button class="live-btn live-btn-any"  data-label="any">🎲 Any</button>
+    </div>
+    <div class="live-status" id="live-status">Loading test set…</div>
+    <h4 class="sidebar-subhead">Test-set browse</h4>
+    <ul id="example-list-inner" class="example-list-inner"></ul>
+  `;
+  list.querySelectorAll('.live-btn').forEach(btn => {
+    btn.addEventListener('click', () => fetchSample({ label: btn.dataset.label }));
   });
 }
 
-// ── Select example ────────────────────────────────────────
-function selectExample(idx) {
-  currentIdx = idx;
-  const ex = EXAMPLES[idx];
-  currentExId = ex.id;
-
-  // Reset node inspector
-  document.getElementById('tweet-inspector').innerHTML =
-    '<div class="inspector-empty">Click any node in the graph to inspect its tweet metadata</div>';
-
-  // Sidebar highlight
-  document.querySelectorAll('.example-item').forEach(el => el.classList.remove('active'));
-  document.getElementById(`ex-item-${idx}`)?.classList.add('active');
-
-  // Header info
-  document.getElementById('graph-title').textContent  = ex.title;
-  document.getElementById('graph-dataset').textContent = ex.dataset;
-  const labelBadge = document.getElementById('graph-label-badge');
-  labelBadge.textContent  = ex.badge;
-  labelBadge.className    = `graph-main-badge ${ex.label === 1 ? 'badge-fake' : 'badge-real'}`;
-  document.getElementById('graph-summary').textContent = ex.summary;
-
-  // Alert banner for the BERT-fails case
-  const alertBanner = document.getElementById('bert-alert');
-  if (ex.id === 'pol_fake_002') {
-    alertBanner.style.display = 'flex';
-  } else {
-    alertBanner.style.display = 'none';
+async function loadIndex() {
+  try {
+    const r = await fetch(`${API_BASE}/api/index`);
+    const json = await r.json();
+    TEST_INDEX = json.items || [];
+    const inner = document.getElementById('example-list-inner');
+    if (!inner) return;
+    inner.innerHTML = '';
+    TEST_INDEX.slice(0, 80).forEach(item => {
+      const li = document.createElement('li');
+      li.className = `example-item ${item.label === 1 ? 'fake' : 'real'}`;
+      li.innerHTML = `
+        <span class="ex-badge ${item.label === 1 ? 'badge-fake' : 'badge-real'}">${item.label === 1 ? 'FAKE' : 'REAL'}</span>
+        <div class="ex-meta">
+          <span class="ex-title">${item.id}</span>
+          <span class="ex-ds">${item.dataset}</span>
+        </div>
+        <span class="ex-nodes">${item.num_nodes}n</span>
+      `;
+      li.addEventListener('click', () => fetchSample({ idx: item.idx }));
+      inner.appendChild(li);
+    });
+    setStatus(`${TEST_INDEX.length} test-set graphs available`);
+  } catch (err) {
+    setStatus('⚠ Backend offline. Start with: python website/api/server.py');
+    console.error(err);
   }
-
-  // Render graph
-  renderer.render(ex.graph, ex.label);
-
-  // Motif panel
-  renderMotifPanel(ex);
-
-  // Predictions panel
-  renderPredictions(ex);
 }
 
-// ── Motif panel ───────────────────────────────────────────
-function renderMotifPanel(ex) {
+function setStatus(msg) {
+  const el = document.getElementById('live-status');
+  if (el) el.textContent = msg;
+}
+
+
+// ── Fetch + render one sample ─────────────────────────────
+async function fetchSample({ label = 'any', idx = null } = {}) {
+  setStatus('Running PropNet inference…');
+  try {
+    const url = idx != null
+      ? `${API_BASE}/api/sample?idx=${idx}`
+      : `${API_BASE}/api/sample?label=${encodeURIComponent(label)}`;
+    const t0 = performance.now();
+    const r = await fetch(url);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${r.status}`);
+    }
+    const data = await r.json();
+    const dt = (performance.now() - t0).toFixed(0);
+    currentGraph = data;
+    renderSample(data, dt);
+    setStatus(`Inference complete · ${dt} ms · graph ${data.id}`);
+  } catch (err) {
+    setStatus(`⚠ ${err.message}`);
+    console.error(err);
+  }
+}
+
+function renderSample(data, latencyMs) {
+  // Reset inspector
+  const insp = document.getElementById('tweet-inspector');
+  if (insp) insp.innerHTML =
+    '<div class="inspector-empty">Click any node in the graph to see its position in the cascade</div>';
+
+  // Header info
+  document.getElementById('graph-title').textContent = `${data.id}`;
+  document.getElementById('graph-dataset').textContent = data.dataset;
+  const labelBadge = document.getElementById('graph-label-badge');
+  labelBadge.textContent = data.label_name;
+  labelBadge.className = `graph-main-badge ${data.label === 1 ? 'badge-fake' : 'badge-real'}`;
+  const summaryEl = document.getElementById('graph-summary');
+  if (summaryEl) {
+    const fusionPred = data.predictions.PropNet_Fusion;
+    const verdict = fusionPred.correct ? 'Correct' : 'Misclassified';
+    summaryEl.innerHTML = `
+      <strong>Real UPFD test graph</strong> · ${data.num_nodes} nodes ·
+      ${data.num_edges} edges · cascade depth ${data.max_depth} ·
+      PropNet verdict: <strong>${verdict}</strong>
+    `;
+  }
+
+  // Hide the static BERT-fail alert (it was tied to a hardcoded id).
+  const alertBanner = document.getElementById('bert-alert');
+  if (alertBanner) alertBanner.style.display = 'none';
+
+  // Render graph
+  renderer.render({ nodes: data.nodes, links: data.links }, data.label);
+
+  // Confidence hero card (the headline numbers for sir)
+  renderConfidenceCard(data, latencyMs);
+
+  // Motif z-score panel
+  renderMotifPanel(data);
+
+  // Per-model predictions
+  renderPredictions(data);
+}
+
+
+// ── Confidence card (NEW — prominent numeric display) ─────
+function renderConfidenceCard(data, latencyMs) {
+  const card = document.getElementById('confidence-card');
+  if (!card) return;
+  const fusion = data.predictions.PropNet_Fusion;
+  const pFake = fusion.p_fake;
+  const pReal = fusion.p_real;
+  const conf = Math.max(pFake, pReal);
+  const decision = pFake > pReal ? 'FAKE' : 'REAL';
+  const decisionClass = pFake > pReal ? 'badge-fake' : 'badge-real';
+  const correctCls = fusion.correct ? 'verdict-correct' : 'verdict-wrong';
+  const correctTxt = fusion.correct ? '✓ Correct' : '✗ Misclassified';
+  const alphaPct = (fusion.alpha * 100).toFixed(1);
+  const textPct  = ((1 - fusion.alpha) * 100).toFixed(1);
+
+  card.innerHTML = `
+    <div class="conf-row-top">
+      <span class="conf-label">PropNet Fusion verdict</span>
+      <span class="conf-decision ${decisionClass}">${decision}</span>
+      <span class="conf-correct ${correctCls}">${correctTxt}</span>
+    </div>
+    <div class="conf-row-confidence">
+      <div class="conf-big-num">${(conf * 100).toFixed(2)}<span class="conf-pct">%</span></div>
+      <div class="conf-big-label">confidence</div>
+    </div>
+    <div class="conf-grid">
+      <div class="conf-stat">
+        <span class="conf-k">p(REAL)</span>
+        <span class="conf-v">${pReal.toFixed(4)}</span>
+      </div>
+      <div class="conf-stat">
+        <span class="conf-k">p(FAKE)</span>
+        <span class="conf-v">${pFake.toFixed(4)}</span>
+      </div>
+      <div class="conf-stat">
+        <span class="conf-k">α gate</span>
+        <span class="conf-v">${fusion.alpha.toFixed(3)}</span>
+      </div>
+      <div class="conf-stat">
+        <span class="conf-k">latency</span>
+        <span class="conf-v">${latencyMs} ms</span>
+      </div>
+    </div>
+    <div class="conf-alpha-bar">
+      <span class="alpha-stream alpha-graph" style="width:${alphaPct}%">
+        Graph stream ${alphaPct}%
+      </span>
+      <span class="alpha-stream alpha-text" style="width:${textPct}%">
+        Motif stream ${textPct}%
+      </span>
+    </div>
+    <div class="conf-meta">
+      Ground truth: <strong>${data.label_name}</strong> ·
+      Source: <strong>${data.dataset}</strong> ·
+      ID <code class="mono">${data.id}</code>
+    </div>
+  `;
+}
+
+
+// ── Motif panel (z-score bars) ────────────────────────────
+function renderMotifPanel(data) {
   const container = document.getElementById('motif-bars');
+  if (!container) return;
   container.innerHTML = '';
 
-  Object.entries(ex.motif).forEach(([key, { z }]) => {
-    const label  = MOTIF_LABELS[key] || key;
+  Object.entries(data.motif).forEach(([key, { z, raw }]) => {
+    const label = MOTIF_LABELS[key] || key;
     const isFakeInd = FAKE_INDICATIVE.has(key);
-    // z is clamped to [-2.5, 2.5] for display
     const clamped = Math.max(-2.5, Math.min(2.5, z));
-    const pct = ((clamped + 2.5) / 5) * 100;   // 0–100
+    const pct = ((clamped + 2.5) / 5) * 100;
     const midPct = 50;
     const isPositive = clamped >= 0;
 
-    // Colour: red if fake-indicative + positive, green if real-indicative + negative, else muted
     let barClass = 'bar-neutral';
-    if (isFakeInd && ex.label === 1 && isPositive)    barClass = 'bar-fake';
-    else if (!isFakeInd && ex.label === 0 && isPositive) barClass = 'bar-real';
-    else if (isFakeInd && ex.label === 0 && !isPositive) barClass = 'bar-real';
-    else if (!isFakeInd && ex.label === 1 && !isPositive) barClass = 'bar-fake';
+    if (isFakeInd && data.label === 1 && isPositive)        barClass = 'bar-fake';
+    else if (!isFakeInd && data.label === 0 && isPositive)  barClass = 'bar-real';
+    else if (isFakeInd && data.label === 0 && !isPositive)  barClass = 'bar-real';
+    else if (!isFakeInd && data.label === 1 && !isPositive) barClass = 'bar-fake';
 
     const row = document.createElement('div');
     row.className = 'motif-row';
@@ -114,11 +238,14 @@ function renderMotifPanel(ex) {
              style="left:${isPositive ? midPct : pct}%;
                     width:${Math.abs(pct - midPct)}%;"></div>
       </div>
-      <span class="motif-val ${z > 0 ? 'pos' : 'neg'}">${z > 0 ? '+' : ''}${z.toFixed(2)}σ</span>
+      <span class="motif-val ${z > 0 ? 'pos' : 'neg'}" title="raw=${raw.toFixed(3)}">
+        ${z > 0 ? '+' : ''}${z.toFixed(2)}σ
+      </span>
     `;
     container.appendChild(row);
   });
 }
+
 
 // ── Predictions panel ─────────────────────────────────────
 const MODEL_DISPLAY = {
@@ -129,11 +256,16 @@ const MODEL_DISPLAY = {
   PropNet_Fusion: { name: 'PropNet Fusion', icon: '⚡' },
 };
 
-function renderPredictions(ex) {
+const MODEL_ORDER = ['GraphOnly_GAT', 'Hybrid_GAT', 'PropNet_Fusion'];
+
+function renderPredictions(data) {
   const container = document.getElementById('pred-rows');
+  if (!container) return;
   container.innerHTML = '';
 
-  Object.entries(ex.predictions).forEach(([modelKey, pred]) => {
+  MODEL_ORDER.forEach(modelKey => {
+    const pred = data.predictions[modelKey];
+    if (!pred) return;
     const { name, icon } = MODEL_DISPLAY[modelKey];
     const pFake = pred.p_fake;
     const pReal = 1 - pFake;
@@ -146,7 +278,7 @@ function renderPredictions(ex) {
       : `<span class="verdict wrong">✗</span>`;
 
     const alphaNote = (isFusion && pred.alpha != null)
-      ? `<span class="alpha-note">α = ${pred.alpha.toFixed(2)}</span>`
+      ? `<span class="alpha-note">α = ${pred.alpha.toFixed(3)}</span>`
       : '';
 
     row.innerHTML = `
@@ -159,23 +291,22 @@ function renderPredictions(ex) {
         <div class="pred-bar-wrap">
           <span class="pred-bar-label real-lbl">REAL</span>
           <div class="pred-track">
-            <div class="pred-fill real-fill" style="width:0%" data-target="${(pReal*100).toFixed(1)}"></div>
+            <div class="pred-fill real-fill" style="width:0%" data-target="${(pReal*100).toFixed(2)}"></div>
           </div>
-          <span class="pred-bar-pct">${(pReal*100).toFixed(1)}%</span>
+          <span class="pred-bar-pct">${(pReal*100).toFixed(2)}%</span>
         </div>
         <div class="pred-bar-wrap">
           <span class="pred-bar-label fake-lbl">FAKE</span>
           <div class="pred-track">
-            <div class="pred-fill fake-fill" style="width:0%" data-target="${(pFake*100).toFixed(1)}"></div>
+            <div class="pred-fill fake-fill" style="width:0%" data-target="${(pFake*100).toFixed(2)}"></div>
           </div>
-          <span class="pred-bar-pct">${(pFake*100).toFixed(1)}%</span>
+          <span class="pred-bar-pct">${(pFake*100).toFixed(2)}%</span>
         </div>
       </div>
     `;
     container.appendChild(row);
   });
 
-  // Animate bars
   requestAnimationFrame(() => {
     document.querySelectorAll('.pred-fill').forEach(bar => {
       const target = bar.dataset.target;
@@ -185,13 +316,15 @@ function renderPredictions(ex) {
   });
 }
 
-// ── Ablation bar chart (vanilla canvas-free) ──────────────
+
+// ── Ablation bar chart (still uses the static MODEL_SUMMARY) ──
 function buildAblationChart() {
   const container = document.getElementById('ablation-chart');
+  if (!container || typeof MODEL_SUMMARY === 'undefined') return;
   container.innerHTML = '';
 
   const maxAUC = 1.0;
-  MODEL_SUMMARY.forEach((m, i) => {
+  MODEL_SUMMARY.forEach((m) => {
     const isBest = m.model === 'PropNet_Fusion';
     const wrap = document.createElement('div');
     wrap.className = `abl-col ${isBest ? 'abl-hero' : ''}`;
@@ -213,7 +346,6 @@ function buildAblationChart() {
     container.appendChild(wrap);
   });
 
-  // Animate bars when in view
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
@@ -230,7 +362,8 @@ function buildAblationChart() {
   observer.observe(container);
 }
 
-// ── Hero stat counters ────────────────────────────────────
+
+// ── Hero stat counters (fire immediately, not on scroll) ──
 function initCounters() {
   const counters = [
     { id: 'stat-auc',    target: 99.3, decimals: 1, suffix: '%' },
@@ -238,38 +371,29 @@ function initCounters() {
     { id: 'stat-seeds',  target: 5,    decimals: 0, suffix: '' },
     { id: 'stat-models', target: 5,    decimals: 0, suffix: '' },
   ];
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (!e.isIntersecting) return;
-      counters.forEach(c => {
-        const el = document.getElementById(c.id);
-        if (!el) return;
-        let start = 0; const duration = 1600;
-        const step = ts => {
-          if (!start) start = ts;
-          const prog = Math.min((ts - start) / duration, 1);
-          const val = prog * c.target;
-          el.textContent = (c.decimals ? val.toFixed(c.decimals) : Math.floor(val)) + c.suffix;
-          if (prog < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      });
-      observer.disconnect();
-    });
-  }, { threshold: 0.5 });
-  const hero = document.getElementById('hero-stats');
-  if (hero) observer.observe(hero);
+  counters.forEach(c => {
+    const el = document.getElementById(c.id);
+    if (!el) return;
+    let start = 0; const duration = 1600;
+    const step = ts => {
+      if (!start) start = ts;
+      const prog = Math.min((ts - start) / duration, 1);
+      const val = prog * c.target;
+      el.textContent = (c.decimals ? val.toFixed(c.decimals) : Math.floor(val)) + c.suffix;
+      if (prog < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
 }
 
-// ── Sticky nav scroll ─────────────────────────────────────
 function initNavScroll() {
   const nav = document.querySelector('.navbar');
+  if (!nav) return;
   window.addEventListener('scroll', () => {
     nav.classList.toggle('scrolled', window.scrollY > 40);
   });
 }
 
-// ── Results tab switcher ──────────────────────────────────
 function initTabSwitcher() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -282,62 +406,42 @@ function initTabSwitcher() {
   });
 }
 
-// ── Node inspector (tweet metadata) ──────────────────────
-function renderNodeInfo(node, deg, exId) {
-  const panel = document.getElementById('tweet-inspector');
-  const tweet = pickTweet(exId, node.group, node.id);
 
-  const roleLabel = node.group === 'root' ? 'Original Post' :
-                    node.group === 'hub'  ? 'Influencer Retweet' : 'Secondary Share';
+// ── Node inspector — now shows REAL graph-structural info ──
+function renderNodeInfo(node, deg) {
+  const panel = document.getElementById('tweet-inspector');
+  if (!panel) return;
+
+  const roleLabel = node.group === 'root' ? 'Original Article (root)' :
+                    node.group === 'hub'  ? 'First-hop reshare (hub)' :
+                                            'Downstream share (leaf)';
 
   const depthDesc = node.depth === 0 ? 'Root — original posting'
                   : node.depth === 1 ? `Depth 1 — first-hop reshare`
-                  : `Depth ${node.depth} — downstream spread`;
-
-  if (!tweet) {
-    panel.innerHTML = `<div class="inspector-empty">No tweet metadata for this node (depth ${node.depth})</div>`;
-    return;
-  }
-
-  const color  = avatarColor(tweet.handle);
-  const inits  = initials(tweet.name);
+                                     : `Depth ${node.depth} — downstream cascade`;
 
   panel.innerHTML = `
     <div class="tweet-card">
       <div class="tweet-card-header">
-        <div class="tweet-avatar" style="background:${color}">${inits}</div>
+        <div class="tweet-avatar" style="background:#4338ca">N${node.id}</div>
         <div class="tweet-user">
-          <div class="tweet-handle">${tweet.name}</div>
-          <div class="tweet-username">@${tweet.handle}</div>
+          <div class="tweet-handle">${roleLabel}</div>
+          <div class="tweet-username">node #${node.id}</div>
         </div>
-        <span class="tweet-role-badge">${roleLabel}</span>
+        <span class="tweet-role-badge">${node.group}</span>
       </div>
-      <div class="tweet-body">${tweet.text}</div>
-      <div class="tweet-meta-row">
-        <div class="tweet-meta-item">
-          <span class="meta-label">Retweets</span>
-          <span class="meta-val">${tweet.rt}</span>
-        </div>
-        <div class="tweet-meta-item">
-          <span class="meta-label">Likes</span>
-          <span class="meta-val">${tweet.likes}</span>
-        </div>
-        <div class="tweet-meta-item">
-          <span class="meta-label">Replies</span>
-          <span class="meta-val">${tweet.replies}</span>
-        </div>
-        <div class="tweet-meta-item">
-          <span class="meta-label">Posted</span>
-          <span class="meta-val" style="font-size:0.68rem">${tweet.time}</span>
-        </div>
+      <div class="tweet-body" style="padding:14px 16px;font-style:italic;color:var(--text-2);font-size:0.85rem;line-height:1.5;">
+        UPFD nodes carry only DistilBERT embeddings — no raw text is bundled with
+        the dataset. The model uses these 768-dim vectors plus the propagation
+        topology you see on the left.
       </div>
       <div class="tweet-struct-row">
         <div class="struct-pill">
-          <span class="sp-label">Graph Role</span>
+          <span class="sp-label">Graph role</span>
           <span class="sp-val">${node.group}</span>
         </div>
         <div class="struct-pill">
-          <span class="sp-label">Cascade Depth</span>
+          <span class="sp-label">Cascade depth</span>
           <span class="sp-val">${node.depth}</span>
         </div>
         <div class="struct-pill">
@@ -352,4 +456,3 @@ function renderNodeInfo(node, deg, exId) {
     </div>
   `;
 }
-

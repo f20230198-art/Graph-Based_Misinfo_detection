@@ -65,7 +65,6 @@ class HybridGATWithAttention(nn.Module):
 class GATGraphClassifier(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int = 128, heads: int = 4, dropout: float = 0.4):
         super().__init__()
-        # BERT 768-d and structural features live on different scales; normalize so attention compares them fairly.
         self.input_norm = nn.LayerNorm(input_dim)
         self.gat1 = GATConv(input_dim, hidden_dim, heads=heads, dropout=dropout)
         self.bn1 = nn.BatchNorm1d(hidden_dim * heads)

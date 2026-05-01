@@ -98,7 +98,6 @@ def apply_motif_scaler(graphs: List[Data], mean: np.ndarray, std: np.ndarray) ->
 
 
 def normalize_motif_features(graphs: List[Data]) -> List[Data]:
-    # Deprecated: fits on all graphs (leaks test stats). Use fit_motif_scaler(train) + apply_motif_scaler per split.
     if not graphs:
         return graphs
     mean, std = fit_motif_scaler(graphs)

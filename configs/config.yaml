@@ -1,8 +1,6 @@
-# PropNet Configuration (UPFD PolitiFact + GossipCop)
-
 paths:
-  upfd_politifact_root: "datasets/UPFD_Dataset/politifact/raw"
-  upfd_gossipcop_root: "datasets/UPFD_Dataset/gossipcop/raw"
+  upfd_politifact_root: "datasets/politifact"
+  upfd_gossipcop_root: "datasets/gossipcop"
   checkpoint_dir: "results/checkpoints"
 
 training:

@@ -25,3 +25,8 @@ seaborn>=0.12.0
 tqdm>=4.65.0
 pyyaml>=6.0
 requests>=2.31.0
+
+# Demo backend (live inference website)
+flask>=3.0.0
+flask-cors>=4.0.0
+scipy>=1.11.0

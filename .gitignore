@@ -1,6 +1,5 @@
-# Data
-datasets/*
-!datasets/.gitkeep
+# Data — download from Google Drive (see README)
+datasets/
 
 # Python
 __pycache__/

@@ -96,7 +96,7 @@
       </p>
     </div>
 
-    <div class="explorer-layout-v2">
+    <div class="explorer-layout-v3">
 
       <!-- Sidebar with example picker -->
       <aside class="sidebar">
@@ -119,6 +119,30 @@
 
         <div id="graph-canvas"></div>
       </div>
+
+      <!-- Right panel: Node inspector + Motif features -->
+      <aside class="right-panel">
+        <div class="panel-card">
+          <h4>Node Inspector</h4>
+          <div id="tweet-inspector">
+            <div class="inspector-empty">
+              Click any node in the graph to see its position in the cascade.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <h4>Shape of the cascade <span class="hint">(z-score vs. dataset average)</span></h4>
+          <div id="motif-bars"></div>
+          <div class="legend-row">
+            <span class="legend-dot fake-dot"></span> high → looks fake
+            &nbsp;&nbsp;
+            <span class="legend-dot real-dot"></span> low → looks real
+            &nbsp;&nbsp;
+            0σ = average graph
+          </div>
+        </div>
+      </aside>
     </div>
   </section>
 
@@ -149,29 +173,6 @@
         <div class="panel-footnote">
           α = the gate inside PropNet that decides how much to trust the graph
           structure vs. the seven hand-built shape features for this particular cascade.
-        </div>
-      </div>
-
-      <!-- Motif features -->
-      <div class="panel-card">
-        <h4>Shape of the cascade <span class="hint">(z-score vs. dataset average)</span></h4>
-        <div id="motif-bars"></div>
-        <div class="legend-row">
-          <span class="legend-dot fake-dot"></span> high → looks fake
-          &nbsp;&nbsp;
-          <span class="legend-dot real-dot"></span> low → looks real
-          &nbsp;&nbsp;
-          0σ = average graph
-        </div>
-      </div>
-
-      <!-- Node inspector -->
-      <div class="panel-card">
-        <h4>Node inspector</h4>
-        <div id="tweet-inspector">
-          <div class="inspector-empty">
-            Click any node in the graph above to see its position in the cascade.
-          </div>
         </div>
       </div>
     </div>

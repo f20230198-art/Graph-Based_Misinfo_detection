@@ -830,6 +830,101 @@ footer {
   .explorer-layout-v2 #graph-canvas { height: 440px; }
 }
 
+
+/* ============================================================
+   v3 layout — three-column explorer (sidebar | graph | inspector)
+   ============================================================ */
+.explorer-layout-v3 {
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
+  gap: 18px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.explorer-layout-v3 .graph-center {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.explorer-layout-v3 #graph-canvas {
+  height: 560px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+.explorer-layout-v3 .right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  max-height: 720px;
+}
+
+/* Sticky sidebar + right panel when there's room */
+@media (min-width: 1100px) {
+  .explorer-layout-v3 .sidebar {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 100px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .explorer-layout-v3 .sidebar .example-list-inner {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+  }
+  .explorer-layout-v3 .sidebar #example-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .explorer-layout-v3 .right-panel {
+    position: sticky;
+    top: 80px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+}
+
+/* Tablet: collapse to 2-col (sidebar + canvas), right panel goes below */
+@media (max-width: 1099px) {
+  .explorer-layout-v3 {
+    grid-template-columns: 240px 1fr;
+  }
+  .explorer-layout-v3 .right-panel {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .explorer-layout-v3 .right-panel .panel-card {
+    flex: 1;
+    min-width: 260px;
+  }
+  .explorer-layout-v3 #graph-canvas { height: 480px; }
+}
+
+/* Mobile: single column */
+@media (max-width: 760px) {
+  .explorer-layout-v3 {
+    grid-template-columns: 1fr;
+  }
+  .explorer-layout-v3 .sidebar { max-height: 220px; }
+  .explorer-layout-v3 .right-panel {
+    flex-direction: column;
+    grid-column: auto;
+  }
+  .explorer-layout-v3 #graph-canvas { height: 400px; }
+}
+
 /* Page 3: details in a neat 2-column grid */
 .details-grid {
   display: grid;

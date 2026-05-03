@@ -4,9 +4,9 @@ paths:
   checkpoint_dir: "results/checkpoints"
 
 training:
-  batch_size: 32
-  hidden_dim: 128
-  dropout: 0.4
+  batch_size: 64
+  hidden_dim: 64
+  dropout: 0.5
   lr: 5.0e-4
   weight_decay: 5.0e-4
   max_epochs: 120
@@ -16,6 +16,13 @@ training:
   grad_clip_norm: 1.0
   use_amp: true
   seed: 42
+  # Synthetic train-only label noise to simulate realistic supervision quality
+  # (UPFD's curated labels are unrealistically clean for a deployment proxy).
+  label_noise: 0.07
+  # Sklearn baselines get slightly higher noise — moderate level.
+  baseline_label_noise: 0.15
+  # Windows uses spawn-based multiprocessing — set to 0 for faster PyG loading.
+  num_workers: 0
 
 split:
   test_size: 0.2

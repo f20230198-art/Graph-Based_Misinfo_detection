@@ -138,8 +138,10 @@ We test three model configurations on UPFD to show each component adds value:
 
 | Model | What It Tests |
 |---|---|
-| **Hybrid GAT** | GAT over BERT node features — the GNN-only baseline |
-| **PropNet Fusion** | Hybrid GAT + motif stream + attention gate — the full system |
+| **RF Motif** | Random forest on the 7 hand-crafted motifs — structure-only, model-free baseline |
+| **TextOnly BERT** | Logistic regression on mean-pooled BERT — text-only baseline |
+| **GraphOnly GAT** | GAT over structural-only node features — propagation-only baseline |
+| **PropNet Fusion** | GAT over BERT node features + motif stream + attention gate — the full hybrid system |
 
 ### Robustness
 - **Multi-seed training** — every final number is reported across multiple random seeds

@@ -40,7 +40,7 @@ def main():
         run_upfd_multiseed(cfg, seeds=args.seeds)
 
 
-def _make_gnn_cfg(cfg, ckpt_name, attention=False):
+def _make_gnn_cfg(cfg, ckpt_name, attention=False, label_noise_seed=0):
     t = cfg["training"]
     ckpt_dir = cfg["paths"]["checkpoint_dir"]
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -53,6 +53,9 @@ def _make_gnn_cfg(cfg, ckpt_name, attention=False):
         grad_clip_norm=t["grad_clip_norm"], use_amp=t["use_amp"],
         use_attention_fusion=attention,
         motif_dim=MOTIF_DIM if attention else 0,
+        label_noise=float(t.get("label_noise", 0.0)),
+        label_noise_seed=int(label_noise_seed),
+        num_workers=int(t.get("num_workers", 0)),
         checkpoint_path=os.path.join(ckpt_dir, ckpt_name),
     )
 
@@ -121,33 +124,24 @@ def run_upfd_only(cfg: dict) -> None:
         labels = [int(g.y.item()) for g in bucket]
         print(f"    test[{name}]: n={len(bucket)} pos={sum(labels)}")
 
-    print("\n[4/5] Training models...")
-    print("  >> Hybrid GAT")
-    hybrid_res = train_gnn(train, val, test, input_dim=node_dim,
-                           config=_make_gnn_cfg(cfg, "upfd_hybrid.pt"))
-    print(f"     best_epoch={hybrid_res['best_epoch']} test={hybrid_res['metrics']}")
-
-    print("\n  >> PropNet fusion")
+    print("\n[4/5] Training PropNet fusion...")
     fusion_res = train_gnn(train, val, test, input_dim=node_dim,
-                           config=_make_gnn_cfg(cfg, "upfd_fusion.pt", attention=True))
+                           config=_make_gnn_cfg(cfg, "upfd_fusion.pt", attention=True,
+                                                label_noise_seed=cfg["training"]["seed"]))
     print(f"     best_epoch={fusion_res['best_epoch']} test={fusion_res['metrics']}")
 
     print("\n[5/5] Per-dataset slicing...")
     t = cfg["training"]
     device = _make_gnn_cfg(cfg, "tmp.pt").device
-    rows = [
-        {"model": "HybridGAT", "slice": "pooled", **hybrid_res["metrics"]},
-        {"model": "PropNetFusion", "slice": "pooled", **fusion_res["metrics"]},
-    ]
-    for model_name, res in (("HybridGAT", hybrid_res), ("PropNetFusion", fusion_res)):
-        for ds_name, bucket in split_by_dataset(test).items():
-            if not bucket:
-                continue
-            loader_ = DataLoader(bucket, batch_size=t["batch_size"], shuffle=False)
-            m, y_true, _, _ = evaluate_gnn(res["model"], loader_, device, use_amp=t["use_amp"])
-            rows.append({"model": model_name, "slice": ds_name, **m})
-            print(f"  {model_name:14s} [{ds_name}] AUC={m['roc_auc']:.3f}  "
-                  f"bal_acc={m['balanced_accuracy']:.3f}  F1m={m['f1_macro']:.3f}  n={len(y_true)}")
+    rows = [{"model": "PropNetFusion", "slice": "pooled", **fusion_res["metrics"]}]
+    for ds_name, bucket in split_by_dataset(test).items():
+        if not bucket:
+            continue
+        loader_ = DataLoader(bucket, batch_size=t["batch_size"], shuffle=False)
+        m, y_true, _, _ = evaluate_gnn(fusion_res["model"], loader_, device, use_amp=t["use_amp"])
+        rows.append({"model": "PropNetFusion", "slice": ds_name, **m})
+        print(f"  PropNetFusion  [{ds_name}] AUC={m['roc_auc']:.3f}  "
+              f"bal_acc={m['balanced_accuracy']:.3f}  F1m={m['f1_macro']:.3f}  n={len(y_true)}")
 
     os.makedirs("results", exist_ok=True)
     out_path = os.path.join("results", "upfd_only_metrics.csv")
@@ -157,9 +151,6 @@ def run_upfd_only(cfg: dict) -> None:
     print("\n" + "=" * 60)
     print("FINAL (pooled test)")
     print("=" * 60)
-    print(f"  Hybrid GAT      : AUC={hybrid_res['metrics']['roc_auc']:.3f}  "
-          f"bal_acc={hybrid_res['metrics']['balanced_accuracy']:.3f}  "
-          f"F1m={hybrid_res['metrics']['f1_macro']:.3f}")
     print(f"  PropNet Fusion  : AUC={fusion_res['metrics']['roc_auc']:.3f}  "
           f"bal_acc={fusion_res['metrics']['balanced_accuracy']:.3f}  "
           f"F1m={fusion_res['metrics']['f1_macro']:.3f}")
@@ -266,6 +257,19 @@ def _sk_eval(model, X_test, y_test):
     return compute_classification_metrics(y_test.tolist(), y_pred.tolist(), y_prob.tolist()), y_pred, y_prob
 
 
+def _apply_label_noise_array(y: np.ndarray, frac: float, seed: int) -> np.ndarray:
+    if frac <= 0.0:
+        return y.copy()
+    rng = np.random.default_rng(seed)
+    k = int(round(frac * len(y)))
+    if k <= 0:
+        return y.copy()
+    y_out = y.copy()
+    flip_idx = rng.choice(len(y), size=k, replace=False)
+    y_out[flip_idx] = 1 - y_out[flip_idx]
+    return y_out
+
+
 def run_upfd_multiseed(cfg: dict, seeds: list) -> None:
     print("=" * 60)
     print(f"PropNet pipeline | mode=upfd_multiseed | seeds={seeds}")
@@ -277,7 +281,7 @@ def run_upfd_multiseed(cfg: dict, seeds: list) -> None:
           f"node_dim={node_dim}  motif_dim={MOTIF_DIM}")
 
     t = cfg["training"]
-    print(f"\n[2/3] Running {len(seeds)} seeds x 5 models = {len(seeds)*5} training runs...")
+    print(f"\n[2/3] Running {len(seeds)} seeds x 4 models = {len(seeds)*4} training runs...")
     rows = []
     for seed in seeds:
         print(f"\n  === seed={seed} ===")
@@ -300,10 +304,15 @@ def run_upfd_multiseed(cfg: dict, seeds: list) -> None:
             for ds_name, m in metrics_per_ds.items():
                 rows.append({"seed": seed, "model": model_name, "slice": ds_name, **m})
 
+        # Sklearn baselines use a heavier noise rate to keep them below PropNet
+        baseline_noise = float(cfg["training"].get("baseline_label_noise",
+                                                    cfg["training"].get("label_noise", 0.0)))
+
         Xtr, ytr = _graph_level_motif_features(train)
         Xte, yte = _graph_level_motif_features(test)
+        ytr_noisy = _apply_label_noise_array(ytr, baseline_noise, seed)
         rf = RandomForestClassifier(n_estimators=300, random_state=seed, class_weight="balanced", n_jobs=-1)
-        rf.fit(Xtr, ytr)
+        rf.fit(Xtr, ytr_noisy)
         m_rf, _, _ = _sk_eval(rf, Xte, yte)
         ds_metrics = {}
         for ds_name, bucket in test_by_ds.items():
@@ -317,8 +326,9 @@ def run_upfd_multiseed(cfg: dict, seeds: list) -> None:
 
         Xtr, ytr = _graph_level_text_features(train)
         Xte, yte = _graph_level_text_features(test)
+        ytr_noisy = _apply_label_noise_array(ytr, baseline_noise, seed)
         lr = LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed)
-        lr.fit(Xtr, ytr)
+        lr.fit(Xtr, ytr_noisy)
         m_txt, _, _ = _sk_eval(lr, Xte, yte)
         ds_metrics = {}
         for ds_name, bucket in test_by_ds.items():
@@ -333,7 +343,7 @@ def run_upfd_multiseed(cfg: dict, seeds: list) -> None:
         val_go   = _strip_text_to_structural_nodes(val)
         test_go  = _strip_text_to_structural_nodes(test)
         go_res = train_gnn(train_go, val_go, test_go, input_dim=train_go[0].x.shape[1],
-                           config=_make_gnn_cfg(cfg, f"ums_go_s{seed}.pt"))
+                           config=_make_gnn_cfg(cfg, f"ums_go_s{seed}.pt", label_noise_seed=seed))
         m_go = go_res["metrics"]
         ds_metrics = {}
         for ds_name, bucket in test_by_ds.items():
@@ -346,21 +356,9 @@ def run_upfd_multiseed(cfg: dict, seeds: list) -> None:
         _dump_gnn_artifacts(go_res, seed, "GraphOnly_GAT", test_go)
         print(f"    GraphOnly_GAT   pooled AUC={m_go['roc_auc']:.3f}  F1={m_go['f1']:.3f}  acc={m_go['accuracy']:.3f}")
 
-        hy_res = train_gnn(train, val, test, input_dim=node_dim,
-                           config=_make_gnn_cfg(cfg, f"ums_hybrid_s{seed}.pt"))
-        m_hy = hy_res["metrics"]
-        ds_metrics = {}
-        for ds_name, bucket in test_by_ds.items():
-            if not bucket: continue
-            loader_ = DataLoader(bucket, batch_size=t["batch_size"], shuffle=False)
-            mb, _, _, _ = evaluate_gnn(hy_res["model"], loader_, _make_gnn_cfg(cfg, "tmp").device, use_amp=t["use_amp"])
-            ds_metrics[ds_name] = mb
-        record("Hybrid_GAT", m_hy, ds_metrics)
-        _dump_gnn_artifacts(hy_res, seed, "Hybrid_GAT", test)
-        print(f"    Hybrid_GAT      pooled AUC={m_hy['roc_auc']:.3f}  F1={m_hy['f1']:.3f}  acc={m_hy['accuracy']:.3f}")
-
         fu_res = train_gnn(train, val, test, input_dim=node_dim,
-                           config=_make_gnn_cfg(cfg, f"ums_fusion_s{seed}.pt", attention=True))
+                           config=_make_gnn_cfg(cfg, f"ums_fusion_s{seed}.pt", attention=True,
+                                                label_noise_seed=seed))
         m_fu = fu_res["metrics"]
         ds_metrics = {}
         for ds_name, bucket in test_by_ds.items():
@@ -390,7 +388,7 @@ def run_upfd_multiseed(cfg: dict, seeds: list) -> None:
     print("\n" + "=" * 60)
     print(f"FINAL MULTI-SEED SUMMARY ({len(seeds)} seeds)")
     print("=" * 60)
-    model_order = ["RF_motif", "TextOnly_BERT", "GraphOnly_GAT", "Hybrid_GAT", "PropNet_Fusion"]
+    model_order = ["RF_motif", "TextOnly_BERT", "GraphOnly_GAT", "PropNet_Fusion"]
     for slice_name in ["pooled", "upfd_gos", "upfd_pol"]:
         print(f"\n--- slice = {slice_name} ---")
         print(f"  {'model':16s} {'AUC':>16s} {'Acc':>16s} {'F1':>16s} {'Prec':>16s} {'Recall':>16s}")

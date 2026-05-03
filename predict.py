@@ -21,7 +21,6 @@ from src.upfd_loader import load_upfd_graphs
 
 MODEL_KINDS = {
     "fusion":   {"ckpt_fmt": "ums_fusion_s{seed}.pt",  "needs_motif": True,  "input": "bert"},
-    "hybrid":   {"ckpt_fmt": "ums_hybrid_s{seed}.pt",  "needs_motif": False, "input": "bert"},
     "graphonly":{"ckpt_fmt": "ums_go_s{seed}.pt",      "needs_motif": False, "input": "structural"},
 }
 
@@ -60,12 +59,14 @@ def _score(model, graph, device: str, kind: str):
     model.eval()
     g = graph.to(device)
     batch = torch.zeros(g.x.shape[0], dtype=torch.long, device=device)
+
+    TEMPERATURE = 1
     with torch.no_grad():
         if kind == "fusion":
             logits = model(g.x, g.edge_index, batch, g.motif_feat.to(device))
         else:
             logits = model(g.x, g.edge_index, batch)
-        probs = torch.softmax(logits.float(), dim=1)[0].cpu().numpy()
+        probs = torch.softmax(logits.float() / TEMPERATURE, dim=1)[0].cpu().numpy()
     pred = int(np.argmax(probs))
     return pred, float(probs[1]), float(probs[0])
 

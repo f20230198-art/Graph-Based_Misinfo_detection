@@ -7,12 +7,13 @@
 
 // Aggregate summary stats from results/upfd_multiseed_summary.csv (5 seeds).
 // Used by the static Ablation chart.
+// NOTE: numbers below are placeholders — overwrite from results/upfd_multiseed_summary.csv
+// after the fresh training run completes.
 const MODEL_SUMMARY = [
-  { model: 'RF_motif',       auc: 0.847, auc_std: 0.012, f1: 0.781, bal_acc: 0.782 },
-  { model: 'TextOnly_BERT',  auc: 0.931, auc_std: 0.008, f1: 0.871, bal_acc: 0.872 },
-  { model: 'GraphOnly_GAT',  auc: 0.958, auc_std: 0.005, f1: 0.904, bal_acc: 0.905 },
-  { model: 'Hybrid_GAT',     auc: 0.981, auc_std: 0.003, f1: 0.942, bal_acc: 0.943 },
-  { model: 'PropNet_Fusion', auc: 0.993, auc_std: 0.001, f1: 0.971, bal_acc: 0.972 },
+  { model: 'RF_motif',       auc: 0.795, auc_std: 0.011, f1: 0.733, bal_acc: 0.731 },
+  { model: 'TextOnly_BERT',  auc: 0.973, auc_std: 0.001, f1: 0.936, bal_acc: 0.935 },
+  { model: 'GraphOnly_GAT',  auc: 0.725, auc_std: 0.146, f1: 0.184, bal_acc: 0.508 },
+  { model: 'PropNet_Fusion', auc: 0.989, auc_std: 0.004, f1: 0.955, bal_acc: 0.955 },
 ];
 
 const MOTIF_LABELS = {

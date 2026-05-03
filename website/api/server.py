@@ -75,53 +75,97 @@ def _structural_nodes(g):
     return g2
 
 
+CACHE_PATH = os.path.join(ROOT, "results", ".server_cache.pkl")
+
+
+def _cache_is_fresh(ckpt_dir: str) -> bool:
+    """Return True if the cache exists and is newer than all checkpoint files."""
+    if not os.path.exists(CACHE_PATH):
+        return False
+    cache_mtime = os.path.getmtime(CACHE_PATH)
+    for fname in os.listdir(ckpt_dir):
+        if fname.endswith(".pt"):
+            if os.path.getmtime(os.path.join(ckpt_dir, fname)) > cache_mtime:
+                return False
+    return True
+
+
 def _bootstrap():
+    import pickle
+    import time
+
+    t0 = time.time()
     print("[boot] loading config…")
     cfg = _load_config()
-    pol_root = os.path.join(ROOT, cfg["paths"]["upfd_politifact_root"])
-    gos_root = os.path.join(ROOT, cfg["paths"]["upfd_gossipcop_root"])
     ckpt_dir = os.path.join(ROOT, cfg["paths"]["checkpoint_dir"])
-
-    print(f"[boot] loading UPFD politifact + gossipcop…")
-    pol = load_upfd_graphs(pol_root, dataset_id="upfd_pol")
-    gos = load_upfd_graphs(gos_root, dataset_id="upfd_gos")
-    pooled = concat_datasets(pol, gos)
-    print(f"[boot]   total graphs: {len(pooled)} (pol={len(pol)}, gos={len(gos)})")
-
-    print(f"[boot] computing motif features…")
-    pooled = attach_motif_features(pooled)
-
-    print(f"[boot] reproducing seed={SEED} stratified split…")
-    train, val, test = stratified_pooled_split(
-        pooled,
-        test_size=cfg["split"]["test_size"],
-        val_size=cfg["split"]["val_size"],
-        random_state=SEED,
-    )
-    motif_mean, motif_std = fit_motif_scaler(train)
-    apply_motif_scaler(train, motif_mean, motif_std)
-    apply_motif_scaler(val, motif_mean, motif_std)
-    apply_motif_scaler(test, motif_mean, motif_std)
-    print(f"[boot]   test split: {len(test)} graphs")
-
-    # Save raw motif features for human-readable display (un-standardized).
-    raw_motif: Dict[str, np.ndarray] = {}
-    for g in test:
-        raw = compute_motif_features(g)  # recompute pre-scaling
-        raw_motif[g.claim_number] = raw
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[boot] device: {device}")
 
-    input_dim = int(test[0].x.shape[1])
+    # ── Try loading cached graph data ──
+    if _cache_is_fresh(ckpt_dir):
+        print("[boot] loading cached graph data (fast path)…")
+        with open(CACHE_PATH, "rb") as f:
+            cached = pickle.load(f)
+        test = cached["test"]
+        test_struct = cached["test_struct"]
+        raw_motif = cached["raw_motif"]
+        motif_mean = cached["motif_mean"]
+        motif_std = cached["motif_std"]
+        input_dim = cached["input_dim"]
+        print(f"[boot]   {len(test)} test graphs loaded from cache")
+    else:
+        print("[boot] no valid cache — full data load…")
+        pol_root = os.path.join(ROOT, cfg["paths"]["upfd_politifact_root"])
+        gos_root = os.path.join(ROOT, cfg["paths"]["upfd_gossipcop_root"])
+
+        print(f"[boot] loading UPFD politifact + gossipcop…")
+        pol = load_upfd_graphs(pol_root, dataset_id="upfd_pol")
+        gos = load_upfd_graphs(gos_root, dataset_id="upfd_gos")
+        pooled = concat_datasets(pol, gos)
+        print(f"[boot]   total graphs: {len(pooled)} (pol={len(pol)}, gos={len(gos)})")
+
+        print(f"[boot] computing motif features…")
+        pooled = attach_motif_features(pooled)
+
+        print(f"[boot] reproducing seed={SEED} stratified split…")
+        train, val, test = stratified_pooled_split(
+            pooled,
+            test_size=cfg["split"]["test_size"],
+            val_size=cfg["split"]["val_size"],
+            random_state=SEED,
+        )
+        motif_mean, motif_std = fit_motif_scaler(train)
+        apply_motif_scaler(train, motif_mean, motif_std)
+        apply_motif_scaler(val, motif_mean, motif_std)
+        apply_motif_scaler(test, motif_mean, motif_std)
+        print(f"[boot]   test split: {len(test)} graphs")
+
+        raw_motif: Dict[str, np.ndarray] = {}
+        for g in test:
+            raw = compute_motif_features(g)
+            raw_motif[g.claim_number] = raw
+
+        test_struct = [_structural_nodes(g) for g in test]
+        input_dim = int(test[0].x.shape[1])
+
+        # Save cache for next boot
+        print("[boot] saving cache for next boot…")
+        os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+        with open(CACHE_PATH, "wb") as f:
+            pickle.dump({
+                "test": test, "test_struct": test_struct,
+                "raw_motif": raw_motif,
+                "motif_mean": motif_mean, "motif_std": motif_std,
+                "input_dim": input_dim,
+            }, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    # ── Load model checkpoints (always — fast) ──
     hidden_dim = cfg["training"]["hidden_dim"]
     dropout = cfg["training"].get("dropout", 0.4)
-
     print(f"[boot] loading checkpoints…")
     models: Dict[str, Any] = {}
     for kind, ckpt_name in [
         ("fusion",   f"ums_fusion_s{SEED}.pt"),
-        ("hybrid",   f"ums_hybrid_s{SEED}.pt"),
         ("graphonly", f"ums_go_s{SEED}.pt"),
     ]:
         ckpt_path = os.path.join(ckpt_dir, ckpt_name)
@@ -139,10 +183,8 @@ def _bootstrap():
     if "fusion" not in models:
         raise RuntimeError("Fusion checkpoint missing — cannot run demo.")
 
-    # Pre-render structural variants of the test graphs for graphonly model.
-    test_struct = [_structural_nodes(g) for g in test]
-
-    print("[boot] ready.\n")
+    elapsed = time.time() - t0
+    print(f"[boot] ready in {elapsed:.1f}s\n")
     return {
         "test": test,
         "test_struct": test_struct,
@@ -165,6 +207,8 @@ def _score_one(model, graph, kind: str) -> dict:
     device = STATE["device"]
     g = graph.to(device)
     batch = torch.zeros(g.x.shape[0], dtype=torch.long, device=device)
+
+    TEMPERATURE = 1.0
     if kind == "fusion":
         # Compute the same internals as the model so we can extract alpha.
         import torch.nn.functional as F
@@ -186,7 +230,7 @@ def _score_one(model, graph, kind: str) -> dict:
         logits = model(g.x, g.edge_index, batch)
         alpha = None
 
-    probs = torch.softmax(logits.float(), dim=1)[0].cpu().numpy()
+    probs = torch.softmax(logits.float() / TEMPERATURE, dim=1)[0].cpu().numpy()
     return {
         "p_real": float(probs[0]),
         "p_fake": float(probs[1]),
@@ -277,12 +321,6 @@ def _serve_graph(g, struct_g) -> dict:
         "alpha":    fusion_res["alpha"],
         "correct":  fusion_res["pred"] == int(g.y.item()),
     }
-    if "hybrid" in STATE["models"]:
-        r = _score_one(STATE["models"]["hybrid"], g, "hybrid")
-        preds["Hybrid_GAT"] = {
-            "p_fake":  r["p_fake"], "p_real": r["p_real"],
-            "correct": r["pred"] == int(g.y.item()),
-        }
     if "graphonly" in STATE["models"]:
         r = _score_one(STATE["models"]["graphonly"], struct_g, "graphonly")
         preds["GraphOnly_GAT"] = {

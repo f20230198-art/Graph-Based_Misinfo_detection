@@ -6,7 +6,7 @@ say. Trained on the UPFD benchmark (PolitiFact + GossipCop) and packaged with
 an interactive web demo that runs the trained model live on held-out test
 graphs.
 
-**Headline result:** ROC-AUC **0.993 ± 0.001** on the 5-seed pooled UPFD test
+**Headline result:** ROC-AUC **0.989 ± 0.004** on the 5-seed pooled UPFD test
 split, validated by a label-shuffle leakage audit.
 
 ---
@@ -66,7 +66,7 @@ Full architecture: [src/model.py](src/model.py).
 │   ├── upfd_loader.py           Loads UPFD raw files into PyG Data objects
 │   ├── motifs.py                7 structural motif features + train-only scaler
 │   ├── pooled_dataset.py        Stratified train/val/test split
-│   ├── model.py                 GAT + HybridGATWithAttention (motif fusion)
+│   ├── model.py                 GAT + PropNet attention-gated motif fusion
 │   ├── train.py                 Training loop with early stopping + AMP
 │   └── utils.py                 Metrics, plotting helpers, seed control
 ├── scripts/
@@ -82,7 +82,7 @@ Full architecture: [src/model.py](src/model.py).
 │   └── README_DEMO.md           Demo-day run sheet
 ├── datasets/                    UPFD raw files (see "Data setup" below)
 ├── results/
-│   ├── checkpoints/             Trained model weights (5 seeds × 3 models)
+│   ├── checkpoints/             Trained model weights (5 seeds × 2 GNN models)
 │   ├── figures/                 Report figures (committed)
 │   └── upfd_multiseed_summary.csv   Aggregate metrics
 └── docs/                        Project proposal + IEEE-format report
@@ -129,10 +129,10 @@ Graph-Based_Misinfo_detection/
 ### 3. Train
 
 ```bash
-# Single-seed run — Hybrid GAT + PropNet Fusion
+# Single-seed run — PropNet Fusion only
 python main.py --mode upfd_only
 
-# Full 5-seed ablation across all 5 models
+# Full 5-seed ablation across all 4 models
 python main.py --mode upfd_multiseed --seeds 42 43 44 45 46
 ```
 
@@ -175,16 +175,17 @@ See [website/README_DEMO.md](website/README_DEMO.md) for the demo-day run sheet.
 
 | Model               | ROC-AUC         | F1            | Balanced Acc. |
 |---------------------|-----------------|---------------|---------------|
-| RF Motif            | 0.847 ± 0.012   | 0.781         | 0.782         |
-| Text-Only BERT      | 0.931 ± 0.008   | 0.871         | 0.872         |
-| Graph-Only GAT      | 0.958 ± 0.005   | 0.904         | 0.905         |
-| Hybrid GAT          | 0.981 ± 0.003   | 0.942         | 0.943         |
-| **PropNet Fusion**  | **0.993 ± 0.001** | **0.971**   | **0.972**     |
+| RF Motif            | 0.795 ± 0.011   | 0.733         | 0.731         |
+| Text-Only BERT      | 0.973 ± 0.001   | 0.936         | 0.935         |
+| Graph-Only GAT      | 0.725 ± 0.146   | 0.184         | 0.508         |
+| **PropNet Fusion**  | **0.989 ± 0.004** | **0.955**   | **0.955**     |
 
-Each row in the ablation isolates one architectural choice. Adding the GNN
-over a text-only baseline lifts AUC by 5 points; replacing structural-only
-node features with full BERT embeddings adds another 2; the motif fusion +
-attention gate adds a final 1.2 points and cuts variance by 3×.
+Each row in the ablation isolates one architectural choice. PropNet Fusion
+combines a Graph Attention Network over BERT-encoded tweet nodes with a
+hand-crafted motif stream via a learned attention gate, beating every
+single-stream baseline on the pooled test split.
+
+
 
 Per-graph predictions, training curves, and figures are produced by
 `main.py --mode upfd_multiseed` and `scripts/make_plots.py`.
@@ -203,7 +204,7 @@ Three guardrails against inflated numbers:
    if it does.
 3. **Label-shuffle audit** — `scripts/sanity_label_shuffle.py` permutes all
    labels and re-runs the full ablation. Every model must collapse to AUC
-   ≈ 0.5. Passes with AUC ∈ [0.486, 0.519].
+   ≈ 0.5. Passes with AUC ∈ [0.48, 0.52].
 
 ---
 

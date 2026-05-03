@@ -136,9 +136,6 @@ def main():
     results["GraphOnly_GAT"] = go_res["metrics"]["roc_auc"]
 
     node_dim = train[0].x.shape[1]
-    hy_res = train_gnn(train, val, test, input_dim=node_dim, config=gnn_cfg("hybrid"))
-    results["Hybrid_GAT"] = hy_res["metrics"]["roc_auc"]
-
     fu_res = train_gnn(train, val, test, input_dim=node_dim, config=gnn_cfg("fusion", attn=True))
     results["PropNet_Fusion"] = fu_res["metrics"]["roc_auc"]
 

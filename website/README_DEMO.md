@@ -40,7 +40,7 @@ For every graph clicked:
 - **Confidence card** — verdict, confidence %, p(real), p(fake), α gate value, latency
 - α-stream bar showing how much PropNet relied on graph stream vs motif stream
 - 7 standardised motif features with z-scores
-- Per-model prediction comparison (GraphOnly, Hybrid, Fusion all run)
+- Per-model prediction comparison (GraphOnly + PropNet Fusion run side-by-side)
 - Ground-truth label so prof can verify it's correct
 
 ## Static sections (already prepared)

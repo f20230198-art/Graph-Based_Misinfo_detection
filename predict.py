@@ -60,7 +60,7 @@ def _score(model, graph, device: str, kind: str):
     g = graph.to(device)
     batch = torch.zeros(g.x.shape[0], dtype=torch.long, device=device)
 
-    TEMPERATURE = 1
+    TEMPERATURE = 1.0
     with torch.no_grad():
         if kind == "fusion":
             logits = model(g.x, g.edge_index, batch, g.motif_feat.to(device))

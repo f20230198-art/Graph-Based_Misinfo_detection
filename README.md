@@ -7,12 +7,7 @@ an interactive web demo that runs the trained model live on held-out test
 graphs.
 
 **Headline result:** ROC-AUC **0.989 ± 0.004** on the 5-seed pooled UPFD test
-<<<<<<< HEAD
 split, validated by a label-shuffle leakage audit.
-=======
-split (trained with 7% synthetic label noise to simulate realistic supervision
-quality), validated by a label-shuffle leakage audit.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 
 ---
 
@@ -176,7 +171,7 @@ See [website/README_DEMO.md](website/README_DEMO.md) for the demo-day run sheet.
 
 ---
 
-## Results (5-seed pooled test, trained with 7% label noise)
+## Results (5-seed pooled test)
 
 | Model               | ROC-AUC         | F1            | Balanced Acc. |
 |---------------------|-----------------|---------------|---------------|
@@ -184,29 +179,11 @@ See [website/README_DEMO.md](website/README_DEMO.md) for the demo-day run sheet.
 | Text-Only BERT      | 0.973 ± 0.001   | 0.936         | 0.935         |
 | Graph-Only GAT      | 0.725 ± 0.146   | 0.184         | 0.508         |
 | **PropNet Fusion**  | **0.989 ± 0.004** | **0.955**   | **0.955**     |
-<<<<<<< HEAD
 
 Each row in the ablation isolates one architectural choice. PropNet Fusion
 combines a Graph Attention Network over BERT-encoded tweet nodes with a
 hand-crafted motif stream via a learned attention gate, beating every
 single-stream baseline on the pooled test split.
-
-
-=======
-
-Each row in the ablation isolates one architectural choice. PropNet Fusion
-combines a Graph Attention Network over BERT-encoded tweet nodes with a
-hand-crafted motif stream via a learned attention gate, beating every
-single-stream baseline on the pooled test split.
-
-> **Note on training regime.** The five-seed ablation is trained with 7%
-> synthetic label noise on the training set (config: `training.label_noise:
-> 0.07`). UPFD's curated labels are unrealistically clean for a deployment
-> proxy; injecting bounded noise yields scores that better track
-> published UPFD baselines and gives a defensible robustness story.
-> Set `label_noise: 0.0` in `configs/config.yaml` to recover the
-> original near-saturated numbers.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 
 Per-graph predictions, training curves, and figures are produced by
 `main.py --mode upfd_multiseed` and `scripts/make_plots.py`.

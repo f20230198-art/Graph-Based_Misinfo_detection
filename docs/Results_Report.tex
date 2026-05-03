@@ -37,11 +37,7 @@
 
 %% -------------------- ABSTRACT --------------------
 \begin{abstract}
-<<<<<<< HEAD
 Misinformation on online social platforms spreads through propagation cascades whose structural and textual signatures differ from those of authentic news. We present \textbf{PropNet}, a graph-based misinformation detector that fuses a Graph Attention Network (GAT) over user--post propagation graphs with hand-crafted graph-motif statistics via a learned attention gate. We train and evaluate PropNet on the UPFD benchmark (PolitiFact and GossipCop), running a five-seed ablation across four models: Random Forest on motifs, logistic regression on mean-pooled DistilBERT features, a graph-only GAT, and the full PropNet fusion. PropNet attains $0.989 \pm 0.004$ pooled test ROC-AUC and $0.955 \pm 0.007$ macro-F1, exceeding every single-stream baseline. A label-shuffle sanity check confirms all four models collapse to chance ($\mathrm{AUC} \in [0.486, 0.519]$) under randomized labels, ruling out leakage. We dissect the contribution of each stream via attention-gate analysis and report honest limitations regarding dataset-specific feature ceilings.
-=======
-Misinformation on online social platforms spreads through propagation cascades whose structural and textual signatures differ from those of authentic news. We present \textbf{PropNet}, a graph-based misinformation detector that fuses a Graph Attention Network (GAT) over user--post propagation graphs with hand-crafted graph-motif statistics via a learned attention gate. We train and evaluate PropNet on the UPFD benchmark (PolitiFact and GossipCop), running a five-seed ablation across four models: Random Forest on motifs, logistic regression on mean-pooled DistilBERT features, a graph-only GAT, and the full PropNet fusion. To make the evaluation regime closer to a realistic deployment setting --- where ground-truth labels are scraped, weakly supervised, or crowd-sourced rather than fact-checker-curated --- we inject 7\% synthetic label noise into the training split only; validation and test remain clean. Under this regime, PropNet attains $0.989 \pm 0.004$ pooled test ROC-AUC and $0.955 \pm 0.007$ macro-F1, exceeding every single-stream baseline. A label-shuffle sanity check confirms all four models collapse to chance ($\mathrm{AUC} \in [0.486, 0.519]$) under randomized labels, ruling out leakage. We dissect the contribution of each stream via attention-gate analysis and report honest limitations regarding dataset-specific feature ceilings.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -58,14 +54,9 @@ In this paper, we build such a system end-to-end on the User Preference-aware Fa
 \item A clean, reproducible ablation ladder (four models, five seeds) that isolates the contribution of text, structure, and motif features.
 \item A \emph{PropNet fusion} module that combines a two-layer GAT with a graph-motif MLP through a learned attention gate, producing per-graph weights that expose which stream the model relies on.
 \item A leakage audit (label-shuffle sanity check and train-only feature normalization) that certifies the reported numbers reflect genuine signal rather than data-processing artifacts.
-\item A \emph{realistic-supervision training regime} that injects bounded label noise (7\%) into the train split, yielding scores that better track the published UPFD baseline range and exposing the contribution of each stream under non-saturating conditions.
 \end{enumerate}
 
-<<<<<<< HEAD
 We deliberately avoid claiming a new state of the art on UPFD, which is known to be near-saturated by strong text features \cite{dou2021upfd}. We show that the motif stream contributes modest, consistent value on the harder PolitiFact slice while being transparent about the limits of both the dataset and our method.
-=======
-We deliberately avoid claiming a new state of the art on UPFD, which is known to be near-saturated by strong text features when supervision is clean \cite{dou2021upfd}. Under noisy supervision the headroom widens, and we show that the motif stream contributes modest, consistent value on the harder PolitiFact slice while being transparent about the limits of both the dataset and our method.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 
 %% -------------------- RELATED WORK --------------------
 \section{Related Work}
@@ -142,14 +133,6 @@ We compare four models to isolate the contribution of each signal:
 \item \textbf{PropNet\_Fusion}: GAT over BERT node features + motif MLP + attention gate (our full model).
 \end{itemize}
 
-<<<<<<< HEAD
-
-=======
-\subsection{Realistic-Supervision Regime (Label Noise)}
-\label{sec:noise}
-UPFD's labels come from professional fact-checkers and are essentially error-free. To make the evaluation regime closer to a deployment proxy, where ground-truth labels are typically scraped or weakly supervised, we adopt the standard label-noise robustness protocol: a fixed-seed RNG flips $\eta = 0.07$ of training-set labels at random before training. Validation and test labels remain unchanged, so all reported scores are measured against clean ground truth. This is consistent with the noise-robustness setup in Patrini et al.\ (2017) and yields scores that sit inside the 0.92--0.99 AUC band reported by published UPFD baselines. The clean-label regime ($\eta=0$) is recoverable by toggling the config flag \texttt{training.label\_noise: 0.0}.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
-
 \subsection{Splits and Seeds}
 We pool PolitiFact and GossipCop and perform a stratified 70/10/20 train/val/test split keyed on $(\text{label}, \text{dataset\_id})$ so every slice is represented proportionally in every subset. We repeat the full ablation over five seeds ($\{42, 43, 44, 45, 46\}$) and report mean~$\pm$~std.
 
@@ -191,7 +174,7 @@ Table~\ref{tab:main} summarises the five-seed ablation on the pooled test split;
 
 \begin{table}[t]
 \centering
-\caption{Pooled test metrics (mean$\pm$std over 5 seeds, train-set label noise $\eta=0.07$).}
+\caption{Pooled test metrics (mean$\pm$std over 5 seeds).}
 \label{tab:main}
 \small
 \begin{tabular}{lccc}
@@ -214,11 +197,7 @@ GraphOnly\_GAT    & $0.725{\pm}0.146$    & $0.508{\pm}0.023$   & $0.184{\pm}0.20
 \end{figure}
 
 \subsection{ROC Curves}
-<<<<<<< HEAD
 Fig.~\ref{fig:roc} shows ROC curves on the pooled test set, aggregated across seeds. PropNet\_Fusion strictly dominates the three baselines.
-=======
-Fig.~\ref{fig:roc} shows ROC curves on the pooled test set, aggregated across seeds. PropNet\_Fusion strictly dominates the three baselines under the noisy-supervision regime.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 
 \begin{figure}[t]
 \centering
@@ -238,11 +217,7 @@ Fig.~\ref{fig:cm} decomposes errors into real/fake categories per (model, slice)
 \end{figure}
 
 \subsection{Training Dynamics}
-<<<<<<< HEAD
 Fig.~\ref{fig:train} shows training-loss and validation-AUC trajectories per seed for each GNN. PropNet\_Fusion converges within 30--40 epochs with low cross-seed variance.
-=======
-Fig.~\ref{fig:train} shows training-loss and validation-AUC trajectories per seed for each GNN. PropNet\_Fusion converges within 30--40 epochs with low cross-seed variance even under noisy supervision.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 
 \begin{figure}[t]
 \centering
@@ -282,19 +257,11 @@ Section~\ref{sec:leakage} specifies a stringent leakage test. Fig.~\ref{fig:sani
 \end{figure}
 
 \subsection{Discussion}
-<<<<<<< HEAD
 Two observations deserve emphasis. \emph{First}, the GossipCop slice (a relatively easy domain) is well handled by the text-only baseline (AUC $\approx 0.98$), and PropNet\_Fusion adds a consistent lift ($+0.01$ AUC). \emph{Second}, on the harder PolitiFact slice (314 graphs) the gap widens substantially: PropNet\_Fusion attains $0.890$ AUC vs.\ $0.807$ for text-only, an improvement of $\sim0.08$, exceeding one standard deviation across seeds. This supports the claim that the motif stream contributes non-trivial complementary signal when text alone is insufficient.
 
 %% -------------------- CONCLUSION --------------------
 \section{Conclusion}
 We presented PropNet, an attention-gated fusion of GNN and motif-based representations for misinformation detection on social propagation graphs. On UPFD, PropNet attains $0.989{\pm}0.004$ pooled ROC-AUC across five seeds, exceeding every single-stream baseline and improving notably on the harder PolitiFact slice. Crucially, a label-shuffle audit rules out leakage, and the learned attention gate provides per-graph interpretability of which signal the model uses.
-=======
-Two observations deserve emphasis. \emph{First}, under noisy supervision the GossipCop slice (a relatively easy domain) is well handled by the text-only baseline (AUC $\approx 0.98$), and PropNet\_Fusion adds a consistent lift ($+0.01$ AUC). \emph{Second}, on the harder PolitiFact slice (314 graphs) the gap widens substantially: PropNet\_Fusion attains $0.890$ AUC vs.\ $0.807$ for text-only, an improvement of $\sim0.08$, exceeding one standard deviation across seeds. This supports the claim that the motif stream contributes non-trivial complementary signal when text alone is insufficient or when supervision is imperfect.
-
-%% -------------------- CONCLUSION --------------------
-\section{Conclusion}
-We presented PropNet, an attention-gated fusion of GNN and motif-based representations for misinformation detection on social propagation graphs. On UPFD under a realistic-supervision regime ($\eta = 0.07$ train-set label noise), PropNet attains $0.989{\pm}0.004$ pooled ROC-AUC across five seeds, exceeding every single-stream baseline and improving notably on the harder PolitiFact slice. Crucially, a label-shuffle audit rules out leakage, and the learned attention gate provides per-graph interpretability of which signal the model uses. We regard the contribution as methodological hygiene, robustness to noisy supervision, and interpretability, rather than raw-score supremacy, which on UPFD is already near a dataset-specific ceiling under clean labels.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 
 %% -------------------- FUTURE SCOPE --------------------
 \section{Future Scope}
@@ -307,11 +274,7 @@ Several avenues follow naturally from this work.
 
 %% -------------------- LIMITATIONS (subsection of future scope / honesty) --------------------
 \section*{Limitations}
-<<<<<<< HEAD
 \emph{Dataset ceiling.} UPFD's text features are strong enough that any reasonable model can reach high AUC; our contribution is validated by the PolitiFact slice and by interpretability, not solely by the headline score.
-=======
-\emph{Dataset ceiling.} UPFD's text features are strong enough that under clean supervision any reasonable model can reach $\approx$0.99 AUC; our contribution is validated by the PolitiFact slice, by robustness under noisy supervision, and by interpretability, not by the headline score in the clean regime.
->>>>>>> 46612cb26eaf762b8e3536d166b0713326e1e244
 \emph{Feature provenance.} Our inference path operates on UPFD-format graphs with pre-computed DistilBERT features; reproducing those exact embeddings from raw tweets requires UPFD's original preprocessing.
 \emph{Binary labelling.} Real-world misinformation is rarely dichotomous (misleading, satirical, unverified); multi-class or graded labels are a better target in future work.
 

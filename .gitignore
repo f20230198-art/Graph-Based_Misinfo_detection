@@ -11,6 +11,7 @@ venv/
 
 # Model checkpoints and large caches
 results/checkpoints/
+results/.server_cache.pkl
 *.pt
 *.pth
 *.safetensors

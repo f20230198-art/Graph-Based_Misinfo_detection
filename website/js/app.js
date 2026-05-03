@@ -252,11 +252,10 @@ const MODEL_DISPLAY = {
   RF_motif:       { name: 'RF Motif',       icon: '🌲' },
   TextOnly_BERT:  { name: 'Text-Only BERT', icon: '📝' },
   GraphOnly_GAT:  { name: 'Graph-Only GAT', icon: '🕸️' },
-  Hybrid_GAT:     { name: 'Hybrid GAT',     icon: '🔀' },
   PropNet_Fusion: { name: 'PropNet Fusion', icon: '⚡' },
 };
 
-const MODEL_ORDER = ['GraphOnly_GAT', 'Hybrid_GAT', 'PropNet_Fusion'];
+const MODEL_ORDER = ['GraphOnly_GAT', 'PropNet_Fusion'];
 
 function renderPredictions(data) {
   const container = document.getElementById('pred-rows');
@@ -331,7 +330,7 @@ function buildAblationChart() {
     const pct = (m.auc / maxAUC * 100).toFixed(1);
     const names = {
       RF_motif: 'RF Motif', TextOnly_BERT: 'Text BERT',
-      GraphOnly_GAT: 'Graph GAT', Hybrid_GAT: 'Hybrid GAT',
+      GraphOnly_GAT: 'Graph GAT',
       PropNet_Fusion: 'PropNet ⚡',
     };
     wrap.innerHTML = `
@@ -366,10 +365,10 @@ function buildAblationChart() {
 // ── Hero stat counters (fire immediately, not on scroll) ──
 function initCounters() {
   const counters = [
-    { id: 'stat-auc',    target: 99.3, decimals: 1, suffix: '%' },
+    { id: 'stat-auc',    target: 98.9, decimals: 1, suffix: '%' },
     { id: 'stat-graphs', target: 5778, decimals: 0, suffix: '' },
     { id: 'stat-seeds',  target: 5,    decimals: 0, suffix: '' },
-    { id: 'stat-models', target: 5,    decimals: 0, suffix: '' },
+    { id: 'stat-models', target: 4,    decimals: 0, suffix: '' },
   ];
   counters.forEach(c => {
     const el = document.getElementById(c.id);

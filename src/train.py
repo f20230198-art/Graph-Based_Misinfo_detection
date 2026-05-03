@@ -30,12 +30,36 @@ class TrainingConfig:
     balance_datasets: bool = False
     use_attention_fusion: bool = False
     motif_dim: int = 0
+    label_noise: float = 0.0
+    label_noise_seed: int = 0
     checkpoint_path: str = "results/checkpoints/best_gnn.pt"
     device: str = (
         "cuda"
         if torch.cuda.is_available()
         else ("mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
     )
+
+
+def _apply_label_noise(graphs, frac: float, seed: int):
+    if frac <= 0.0:
+        return graphs
+    import copy as _copy
+    rng = np.random.default_rng(seed)
+    n = len(graphs)
+    k = int(round(frac * n))
+    if k <= 0:
+        return graphs
+    flip_idx = set(rng.choice(n, size=k, replace=False).tolist())
+    out = []
+    for i, g in enumerate(graphs):
+        if i in flip_idx:
+            g2 = _copy.copy(g)
+            y = int(g.y.item())
+            g2.y = torch.tensor([1 - y], dtype=torch.long)
+            out.append(g2)
+        else:
+            out.append(g)
+    return out
 
 
 def _compute_class_weights(graphs, device: str) -> torch.Tensor:
@@ -123,6 +147,8 @@ def train_gnn(
 ):
     if len(train_graphs) == 0 or len(val_graphs) == 0 or len(test_graphs) == 0:
         raise ValueError("train/val/test graph splits must be non-empty for production training.")
+
+    train_graphs = _apply_label_noise(train_graphs, config.label_noise, config.label_noise_seed)
 
     if config.use_attention_fusion:
         if config.motif_dim <= 0:

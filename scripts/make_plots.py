@@ -18,13 +18,12 @@ RESULTS = os.path.join(ROOT, "results")
 FIG_DIR = os.path.join(RESULTS, "figures")
 os.makedirs(FIG_DIR, exist_ok=True)
 
-MODEL_ORDER = ["RF_motif", "TextOnly_BERT", "GraphOnly_GAT", "Hybrid_GAT", "PropNet_Fusion"]
+MODEL_ORDER = ["RF_motif", "TextOnly_BERT", "GraphOnly_GAT", "PropNet_Fusion"]
 SLICE_ORDER = ["pooled", "upfd_gos", "upfd_pol"]
 MODEL_COLORS = {
     "RF_motif":       "#8c564b",
     "TextOnly_BERT":  "#ff7f0e",
     "GraphOnly_GAT":  "#9467bd",
-    "Hybrid_GAT":     "#1f77b4",
     "PropNet_Fusion": "#2ca02c",
 }
 
@@ -121,7 +120,7 @@ def plot_confusion_matrices() -> None:
 
 
 def plot_training_curves() -> None:
-    gnn_models = ["GraphOnly_GAT", "Hybrid_GAT", "PropNet_Fusion"]
+    gnn_models = ["GraphOnly_GAT", "PropNet_Fusion"]
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     for model in gnn_models:
         files = sorted(glob.glob(os.path.join(RESULTS, "histories", f"{model}_s*.csv")))
